@@ -1,0 +1,126 @@
+---
+version: "3.2"
+
+services:
+  zookeeper:
+    hostname: zookeeper
+    image: confluentinc/cp-zookeeper:3.2.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    hostname: kafka
+    image: confluentinc/cp-kafka:3.2.1
+    ports:
+      - "9092:9092"
+    depends_on:
+    - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+#  kafka-create-topics:
+#    image: confluentinc/cp-kafka
+#    depends_on:
+#      - kafka
+#    hostname: kafka-create-topics
+#    # We defined a dependency on "kafka", but `depends_on` will NOT wait for the
+#    # dependencies to be "ready" before starting the "kafka-create-topics"
+#    # container;  it waits only until the dependencies have started.  Hence we
+#    # must control startup order more explicitly.
+#    # See https://docs.docker.com/compose/startup-order/
+#    command: "bash -c 'echo Waiting for Kafka to be ready... && \
+#                       cub kafka-ready -b kafka:9092 1 20 && \
+#                       kafka-topics --create --topic test --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 && \
+#                       sleep infinity'"
+#    environment:
+#      # The following settings are listed here only to satisfy the image's requirements.
+#      # We override the image's `command` anyways, hence this container will not start a broker.
+#      KAFKA_BROKER_ID: ignored
+#      KAFKA_ZOOKEEPER_CONNECT: ignored
+
+#  kafka-rest:
+#    image: confluentinc/cp-kafka-rest
+#    ports:
+#      - "8082:8082"
+#    depends_on:
+#    - zookeeper
+#    environment:
+#      KAFKA_REST_ZOOKEEPER_CONNECT: "192.168.1.13:2181"
+#      KAFKA_REST_LISTENERS: 'http://kafka-rest:8082'
+#      KAFKA_REST_HOST_NAME: 'kafka-rest'
+#    network_mode: host
+#    extra_hosts:
+#    - "moby:127.0.0.1"
+
+#  kafka-topics-ui:
+#    image: landoop/kafka-topics-ui
+#    ports:
+#    - 8000:8000
+#    environment:
+#      KAFKA_REST_PROXY_URL: "192.168.1.13:8082"
+#      PROXY: "true"
+#    network_mode: host
+#    extra_hosts:
+#      - "moby:127.0.0.1"
+
+  # mongo db
+  mongo:
+    image: mongo:3.4
+    ports:
+    - 27017:27017
+
+  injector:
+    image: poc/datalayer-injector
+    build: demo-injector
+    depends_on:
+    - kafka
+    volumes:
+    - ./demo-injector/config/application-docker.properties:/config/application-default.properties
+    ports:
+        - "8091:8080"
+
+  consumer:
+    image: poc/datalayer-consumer
+    build: demo-consumer
+    depends_on:
+    - kafka
+    - mongo
+    volumes:
+    - ./demo-consumer/config/application-docker.properties:/config/application-default.properties
+
+  api:
+    image: poc/datalayer-api
+    build: demo-api
+    depends_on:
+    - mongo
+    volumes:
+    - ./demo-api/config/application-docker.properties:/config/application-default.properties
+    ports:
+    - "8090:8080"
+
+  linxo:
+    image: poc/datalayer-linxo-adapter
+    build: demo-linxo-adapter
+    depends_on:
+    - kafka
+    volumes:
+    - ./demo-linxo-adapter/config/application-docker.properties:/config/application-default.properties
+    - ./export/linxo/:/data/
+
+  prometheus:
+    image: prom/prometheus:v1.7.1
+    ports:
+    - "9090:9090"
+    volumes:
+    - "./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml"
+
+  grafana:
+    image: grafana/grafana
+    ports:
+    - "3000:3000"
+    environment:
+    - "GF_SECURITY_ADMIN_PASSWORD=secret"

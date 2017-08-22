@@ -1,0 +1,9 @@
+{
+  "properties": [
+    {
+      "name": "app.topics.test",
+      "type": "java.lang.String",
+      "description": "test topic name."
+    }
+  ]
+}
